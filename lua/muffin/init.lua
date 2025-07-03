@@ -44,6 +44,11 @@ end
 local function setup_autocmds(buf_id)
 	vim.keymap.set("n", "q", vim.cmd.quit, { buffer = buf_id })
 
+	vim.keymap.set("n", "<cr>", function()
+		Muffin.active.restore_on_close = false
+		vim.cmd.quit()
+	end, { buffer = buf_id })
+
 	vim.keymap.set("n", "h", function()
 		local parent = Muffin.active.node.parent
 		if not parent then
@@ -125,18 +130,55 @@ local function build_tree(document_symbols, parent)
 	return nodes
 end
 
+---@param pos lsp.Position
+---@param tree muffin.Node[]
+---@return muffin.Node?
+local function get_current_node(pos, tree)
+	for _, node in ipairs(tree) do
+		if node_contains_pos(node, pos) then
+			return get_current_node(pos, node.children) or node
+		end
+	end
+
+	return nil
+end
+
+---@param pos lsp.Position
+---@param tree muffin.Node[]
+---@return {node: muffin.Node, distance: integer}?
+local function get_closest_node(pos, tree)
+	local min_distance = 999999
+
+	---@type muffin.Node?
+	local closest_node = nil
+
+	for _, node in ipairs(tree) do
+		local range = node.symbol.range
+
+		local distance = math.min(math.abs(range["end"].line - pos.line), math.abs(range.start.line - pos.line))
+
+		local inner = get_closest_node(pos, node.children)
+
+		if inner and inner.distance <= distance then
+			distance = inner.distance
+			node = inner.node
+		end
+
+		if distance <= min_distance then
+			min_distance = distance
+			closest_node = node
+		end
+	end
+
+	return { node = closest_node, distance = min_distance }
+end
+
 --- Get tree node under cursor
 ---@param pos lsp.Position
 ---@param tree muffin.Node[]
 ---@return muffin.Node?
 local function get_node_for_pos(pos, tree)
-	for _, node in ipairs(tree) do
-		if node_contains_pos(node, pos) then
-			return get_node_for_pos(pos, node.children) or node
-		end
-	end
-
-	return nil
+	return get_current_node(pos, tree) or get_closest_node(pos, tree).node
 end
 
 local M = {}
@@ -147,6 +189,7 @@ local M = {}
 ---@field prev_cursor_pos integer[]
 ---@field tree muffin.Node[]
 ---@field node muffin.Node?
+---@field restore_on_close boolean?
 
 Muffin = {
 	---@type muffin.Active?
@@ -215,6 +258,7 @@ function Muffin.open()
 		prev_cursor_pos = prev_cursor_pos,
 		tree = tree,
 		node = node_under_cursor,
+		restore_on_close = true,
 	}
 
 	Muffin.sync()
@@ -253,7 +297,10 @@ function Muffin.close()
 	end
 
 	vim.api.nvim_win_close(Muffin.active.win_id, true)
-	vim.api.nvim_win_set_cursor(Muffin.active.prev_win_id, Muffin.active.prev_cursor_pos)
+
+	if Muffin.active.restore_on_close then
+		vim.api.nvim_win_set_cursor(Muffin.active.prev_win_id, Muffin.active.prev_cursor_pos)
+	end
 
 	Muffin.active = nil
 
