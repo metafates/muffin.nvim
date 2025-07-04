@@ -190,6 +190,8 @@ local M = {}
 ---@field tree muffin.Node[]
 ---@field node muffin.Node?
 ---@field restore_on_close boolean?
+---@field namespace_id integer
+---@field extmark_id integer?
 
 Muffin = {
 	---@type muffin.Active?
@@ -259,6 +261,7 @@ function Muffin.open()
 		tree = tree,
 		node = node_under_cursor,
 		restore_on_close = true,
+		namespace_id = vim.api.nvim_create_namespace("Muffin"),
 	}
 
 	Muffin.sync()
@@ -278,12 +281,33 @@ function Muffin.sync()
 
 	vim.api.nvim_buf_set_lines(buf_id, 0, -1, false, replacement)
 
+	if Muffin.active.extmark_id then
+		vim.api.nvim_buf_del_extmark(
+			vim.api.nvim_win_get_buf(Muffin.active.prev_win_id),
+			Muffin.active.namespace_id,
+			Muffin.active.extmark_id
+		)
+	end
+
 	if Muffin.active.node then
 		vim.api.nvim_win_set_cursor(win_id, { Muffin.active.node.id, 0 })
 
-		local start_pos = Muffin.active.node.symbol.range.start
+		local range = Muffin.active.node.symbol.range
 
-		vim.api.nvim_win_set_cursor(Muffin.active.prev_win_id, { start_pos.line + 1, start_pos.character })
+		local start_row = range.start.line + 1
+		local start_col = range.start.character
+
+		local end_row = range["end"].line + 1
+		local end_col = range["end"].character
+
+		vim.api.nvim_win_set_cursor(Muffin.active.prev_win_id, { start_row, start_col })
+		Muffin.active.extmark_id = vim.api.nvim_buf_set_extmark(
+			vim.api.nvim_win_get_buf(Muffin.active.prev_win_id),
+			Muffin.active.namespace_id,
+			start_row - 1,
+			start_col,
+			{ end_row = end_row - 1, end_col = end_col, hl_group = "Visual" }
+		)
 	end
 
 	vim.bo[buf_id].modifiable = false
@@ -301,6 +325,12 @@ function Muffin.close()
 	if Muffin.active.restore_on_close then
 		vim.api.nvim_win_set_cursor(Muffin.active.prev_win_id, Muffin.active.prev_cursor_pos)
 	end
+
+	vim.api.nvim_buf_del_extmark(
+		vim.api.nvim_win_get_buf(Muffin.active.prev_win_id),
+		Muffin.active.namespace_id,
+		Muffin.active.extmark_id
+	)
 
 	Muffin.active = nil
 
