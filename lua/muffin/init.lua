@@ -1,7 +1,35 @@
-local H = {}
+-------------- TYPES -----------------
+
+---@class muffin.Node
+---@field symbol lsp.DocumentSymbol
+---@field parent muffin.Node?
+---@field children muffin.Node[]
+---@field id integer
+
+---@class muffin.Active
+---@field win_id integer
+---@field prev_win_id integer
+---@field prev_cursor_pos integer[]
+---@field tree muffin.Node[]
+---@field node muffin.Node?
+---@field restore_on_close boolean?
+---@field namespace_id integer
+---@field extmark_id integer?
+---@field autocmd_ids integer[]
+
+---@class muffin.Config
+---@field icon_provider fun(kind: lsp.SymbolKind): string
+
+--------------------------------------
+
+---@param s string
+---@return string
+local function trim(s)
+	return s:match("^%s*(.-)%s*$")
+end
 
 ---@return integer
-function H.new_buf()
+local function new_buf()
 	local buf_id = vim.api.nvim_create_buf(false, true)
 
 	vim.api.nvim_buf_set_name(buf_id, "muffin://" .. buf_id)
@@ -13,7 +41,7 @@ end
 
 ---@param buf_id integer
 ---@return integer
-function H.new_win(buf_id)
+local function new_win(buf_id)
 	local lines = vim.o.lines
 	local columns = vim.o.columns
 
@@ -41,7 +69,9 @@ function H.new_win(buf_id)
 	return win_id
 end
 
-local function setup_autocmds(buf_id)
+local function setup_autocmds()
+	local buf_id = vim.api.nvim_win_get_buf(Muffin.active.win_id)
+
 	vim.keymap.set("n", "q", vim.cmd.quit, { buffer = buf_id })
 
 	vim.keymap.set("n", "<cr>", function()
@@ -69,7 +99,7 @@ local function setup_autocmds(buf_id)
 		Muffin.sync()
 	end, { buffer = buf_id })
 
-	vim.api.nvim_create_autocmd("CursorMoved", {
+	local cursor_moved_autocmd_id = vim.api.nvim_create_autocmd("CursorMoved", {
 		buffer = buf_id,
 		callback = function()
 			local cursor = vim.api.nvim_win_get_cursor(0)
@@ -83,19 +113,17 @@ local function setup_autocmds(buf_id)
 		end,
 	})
 
-	vim.api.nvim_create_autocmd("BufLeave", {
+	local buf_leave_autocmd_id = vim.api.nvim_create_autocmd("BufLeave", {
 		buffer = buf_id,
 		callback = function()
 			Muffin.close()
 		end,
 	})
-end
 
----@class muffin.Node
----@field symbol lsp.DocumentSymbol
----@field parent muffin.Node?
----@field children muffin.Node[]
----@field id integer
+	for _, id in ipairs({ cursor_moved_autocmd_id, buf_leave_autocmd_id }) do
+		table.insert(Muffin.active.autocmd_ids, id)
+	end
+end
 
 ---@param node muffin.Node
 ---@param pos lsp.Position
@@ -183,26 +211,58 @@ end
 
 local M = {}
 
----@class muffin.Active
----@field win_id integer
----@field prev_win_id integer
----@field prev_cursor_pos integer[]
----@field tree muffin.Node[]
----@field node muffin.Node?
----@field restore_on_close boolean?
----@field namespace_id integer
----@field extmark_id integer?
+---@return fun(kind: lsp.SymbolKind): string icon_provider
+local function create_icon_provider()
+	if not MiniIcons then
+		return function()
+			return ""
+		end
+	end
+
+	---@type table<lsp.SymbolKind, string>
+	local cache = {}
+
+	return function(kind)
+		local icon = cache[kind]
+
+		if icon ~= nil then
+			return icon
+		end
+
+		for kind_name, kind_id in pairs(vim.lsp.protocol.SymbolKind) do
+			if kind_id == kind then
+				icon = MiniIcons.get("lsp", kind_name)
+
+				cache[kind] = icon
+
+				return icon
+			end
+		end
+
+		icon = MiniIcons.get("lsp", "")
+
+		cache[kind] = icon
+
+		return icon
+	end
+end
+
+---@type muffin.Config
+local DEFAULT_CONFIG = {
+	icon_provider = create_icon_provider(),
+}
 
 Muffin = {
 	---@type muffin.Active?
 	active = nil,
+
+	---@type muffin.Config
+	config = DEFAULT_CONFIG,
 }
 
-local default_config = {}
-
----@param config? table
+---@param config? muffin.Config
 function M.setup(config)
-	config = vim.tbl_extend("force", default_config, config or {})
+	Muffin.config = vim.tbl_extend("force", DEFAULT_CONFIG, config)
 end
 
 ---@return boolean
@@ -249,10 +309,8 @@ function Muffin.open()
 	local position = vim.lsp.util.make_position_params(0, "utf-8").position
 	local node_under_cursor = get_node_for_pos(position, tree)
 
-	local buf_id = H.new_buf()
-	local win_id = H.new_win(buf_id)
-
-	setup_autocmds(buf_id)
+	local buf_id = new_buf()
+	local win_id = new_win(buf_id)
 
 	Muffin.active = {
 		win_id = win_id,
@@ -262,7 +320,10 @@ function Muffin.open()
 		node = node_under_cursor,
 		restore_on_close = true,
 		namespace_id = vim.api.nvim_create_namespace("Muffin"),
+		autocmd_ids = {},
 	}
+
+	setup_autocmds()
 
 	Muffin.sync()
 end
@@ -274,7 +335,14 @@ function Muffin.sync()
 	local replacement = {}
 
 	for _, item in ipairs(Muffin.active_current_nodes()) do
-		table.insert(replacement, item.symbol.name)
+		local icon = Muffin.config.icon_provider(item.symbol.kind)
+		local display = string.format("%s %s", icon, item.symbol.name)
+
+		if #item.children > 0 then
+			display = display .. " .."
+		end
+
+		table.insert(replacement, " " .. trim(display))
 	end
 
 	vim.bo[buf_id].modifiable = true
@@ -318,6 +386,10 @@ end
 function Muffin.close()
 	if not Muffin.is_active() then
 		return false
+	end
+
+	for _, id in ipairs(Muffin.active.autocmd_ids) do
+		vim.api.nvim_del_autocmd(id)
 	end
 
 	vim.api.nvim_win_close(Muffin.active.win_id, true)
