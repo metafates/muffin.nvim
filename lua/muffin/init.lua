@@ -16,6 +16,7 @@
 ---@field namespace_id integer
 ---@field extmark_id integer?
 ---@field autocmd_ids integer[]
+---@field request_window_update boolean
 
 ---@class muffin.Config
 ---@field icon_provider fun(kind: lsp.SymbolKind): string
@@ -40,22 +41,19 @@ local function new_buf()
 end
 
 ---@param buf_id integer
+---@param title string
+---@param width integer
+---@param height integer
 ---@return integer
-local function new_win(buf_id)
-	local lines = vim.o.lines
-	local columns = vim.o.columns
-
-	local width = math.floor(columns * 0.3)
-	local height = math.floor(lines * 0.75)
-
+local function new_win(buf_id, title, width, height)
 	local win_id = vim.api.nvim_open_win(buf_id, true, {
-		title = "Muffin",
+		title = title,
 		relative = "editor",
 		style = "minimal",
 		width = width,
 		height = height,
-		row = lines - 1,
-		col = columns - 1,
+		row = vim.o.lines - 1,
+		col = vim.o.columns - 1,
 	})
 
 	vim.wo[win_id].foldenable = false
@@ -86,6 +84,8 @@ local function setup_autocmds()
 		end
 
 		Muffin.active.node = parent
+		Muffin.active.request_window_update = true
+
 		Muffin.sync()
 	end, { buffer = buf_id })
 
@@ -96,6 +96,8 @@ local function setup_autocmds()
 		end
 
 		Muffin.active.node = children[1]
+		Muffin.active.request_window_update = true
+
 		Muffin.sync()
 	end, { buffer = buf_id })
 
@@ -274,6 +276,20 @@ function Muffin.active_current_nodes()
 	return ((Muffin.active.node or {}).parent or {}).children or Muffin.active.tree
 end
 
+---@return string
+local function new_active_window_title()
+	local parent = (Muffin.active.node or {}).parent
+
+	if parent then
+		return parent.symbol.name
+	end
+
+	local buf_id = vim.api.nvim_win_get_buf(Muffin.active.prev_win_id)
+	local buf_name = vim.api.nvim_buf_get_name(buf_id)
+
+	return vim.fs.basename(buf_name)
+end
+
 --- Open popup
 function Muffin.open()
 	if Muffin.is_active() then
@@ -309,11 +325,8 @@ function Muffin.open()
 	local position = vim.lsp.util.make_position_params(0, "utf-8").position
 	local node_under_cursor = get_node_for_pos(position, tree)
 
-	local buf_id = new_buf()
-	local win_id = new_win(buf_id)
-
 	Muffin.active = {
-		win_id = win_id,
+		win_id = -1,
 		prev_win_id = prev_win_id,
 		prev_cursor_pos = prev_cursor_pos,
 		tree = tree,
@@ -321,20 +334,20 @@ function Muffin.open()
 		restore_on_close = true,
 		namespace_id = vim.api.nvim_create_namespace("Muffin"),
 		autocmd_ids = {},
+		request_window_update = true,
 	}
-
-	setup_autocmds()
 
 	Muffin.sync()
 end
 
 function Muffin.sync()
-	local win_id = Muffin.active.win_id
-	local buf_id = vim.api.nvim_win_get_buf(win_id)
-
 	local replacement = {}
+	local active_current_nodes = Muffin.active_current_nodes()
 
-	for _, item in ipairs(Muffin.active_current_nodes()) do
+	local win_width = 0
+	local win_height = #active_current_nodes
+
+	for _, item in ipairs(active_current_nodes) do
 		local icon = Muffin.config.icon_provider(item.symbol.kind)
 		local display = string.format("%s %s", icon, item.symbol.name)
 
@@ -342,8 +355,40 @@ function Muffin.sync()
 			display = display .. " .."
 		end
 
-		table.insert(replacement, " " .. trim(display))
+		display = " " .. trim(display)
+
+		local width = vim.api.nvim_strwidth(display)
+
+		win_width = math.max(win_width, width)
+
+		table.insert(replacement, display)
 	end
+
+	if Muffin.active.request_window_update then
+		Muffin.active.request_window_update = false
+
+		if Muffin.active.win_id >= 0 then
+			for _, id in ipairs(Muffin.active.autocmd_ids) do
+				vim.api.nvim_del_autocmd(id)
+			end
+
+			Muffin.active.autocmd_ids = {}
+
+			vim.api.nvim_win_close(Muffin.active.win_id, true)
+		end
+
+		local buf_id = new_buf()
+		local title = new_active_window_title()
+
+		local win_id = new_win(buf_id, title, win_width, win_height)
+
+		Muffin.active.win_id = win_id
+
+		setup_autocmds()
+	end
+
+	local win_id = Muffin.active.win_id
+	local buf_id = vim.api.nvim_win_get_buf(win_id)
 
 	vim.bo[buf_id].modifiable = true
 
