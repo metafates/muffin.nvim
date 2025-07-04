@@ -19,7 +19,8 @@
 ---@field request_window_update boolean
 
 ---@class muffin.Config
----@field icon_provider fun(kind: lsp.SymbolKind): string
+---@field symbol_icon_provider fun(kind: lsp.SymbolKind): string
+---@field file_icon_provider fun(path: string): string
 
 --------------------------------------
 
@@ -251,7 +252,16 @@ end
 
 ---@type muffin.Config
 local DEFAULT_CONFIG = {
-	icon_provider = create_icon_provider(),
+	symbol_icon_provider = create_icon_provider(),
+	file_icon_provider = function(path)
+		if not MiniIcons then
+			return ""
+		end
+
+		local icon = MiniIcons.get("file", path)
+
+		return icon
+	end,
 }
 
 Muffin = {
@@ -281,13 +291,18 @@ local function new_active_window_title()
 	local parent = (Muffin.active.node or {}).parent
 
 	if parent then
-		return parent.symbol.name
+		local icon = Muffin.config.symbol_icon_provider(parent.symbol.kind)
+		local title = icon .. " " .. parent.symbol.name
+
+		return trim(title)
 	end
 
 	local buf_id = vim.api.nvim_win_get_buf(Muffin.active.prev_win_id)
 	local buf_name = vim.api.nvim_buf_get_name(buf_id)
 
-	return vim.fs.basename(buf_name)
+	local icon = Muffin.config.file_icon_provider(buf_name)
+
+	return trim(icon .. " " .. vim.fs.basename(buf_name))
 end
 
 --- Open popup
@@ -340,6 +355,19 @@ function Muffin.open()
 	Muffin.sync()
 end
 
+---@param node muffin.Node
+---@return string
+local function display_node(node)
+	local icon = Muffin.config.symbol_icon_provider(node.symbol.kind)
+	local display = string.format("%s %s", icon, node.symbol.name)
+
+	if #node.children > 0 then
+		display = display .. " .."
+	end
+
+	return " " .. trim(display) .. " "
+end
+
 function Muffin.sync()
 	local replacement = {}
 	local active_current_nodes = Muffin.active_current_nodes()
@@ -347,15 +375,8 @@ function Muffin.sync()
 	local win_width = 0
 	local win_height = #active_current_nodes
 
-	for _, item in ipairs(active_current_nodes) do
-		local icon = Muffin.config.icon_provider(item.symbol.kind)
-		local display = string.format("%s %s", icon, item.symbol.name)
-
-		if #item.children > 0 then
-			display = display .. " .."
-		end
-
-		display = " " .. trim(display)
+	for _, node in ipairs(active_current_nodes) do
+		local display = display_node(node)
 
 		local width = vim.api.nvim_strwidth(display)
 
@@ -379,6 +400,8 @@ function Muffin.sync()
 
 		local buf_id = new_buf()
 		local title = new_active_window_title()
+
+		win_width = math.max(win_width, vim.api.nvim_strwidth(title))
 
 		local win_id = new_win(buf_id, title, win_width, win_height)
 
