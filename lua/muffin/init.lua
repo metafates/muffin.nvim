@@ -78,6 +78,17 @@ local function setup_autocmds()
 		vim.cmd.quit()
 	end, { buffer = buf_id })
 
+	vim.keymap.set("n", "c", function()
+		vim.api.nvim_buf_call(vim.api.nvim_win_get_buf(Muffin.active.prev_win_id), function()
+			local range = Muffin.active.node.symbol.range
+
+			local line_start = range.start.line + 1
+			local line_end = range["end"].line + 1
+
+			require("vim._comment").toggle_lines(line_start, line_end)
+		end)
+	end, { buffer = buf_id })
+
 	vim.keymap.set("n", "h", function()
 		local parent = Muffin.active.node.parent
 		if not parent then
