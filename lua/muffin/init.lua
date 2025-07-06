@@ -249,8 +249,10 @@ local function setup_keymap()
 
 	-- TODO: allow redefining it
 	local keys = {
-		["q"] = action_close,
 		["<cr>"] = action_select,
+		["o"] = action_select,
+
+		["q"] = action_close,
 		["f"] = action_fold,
 		["c"] = action_comment,
 		["h"] = action_back,

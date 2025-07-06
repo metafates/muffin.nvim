@@ -65,7 +65,7 @@ When popup is opened, you can use the following keys for certain actions:
 | <kbd>q</kbd> | Close popup |
 | <kbd>h</kbd> | Go back |
 | <kbd>l</kbd> | Go forward |
-| <kbd>return</kbd> | Close popup and leave cursor at selected symbol |
+| <kbd>return</kbd> or <kbd>o</kbd> | Close popup and leave cursor at selected symbol |
 
 You can't rebind these keys _yet_.
 
