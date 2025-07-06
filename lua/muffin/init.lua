@@ -247,6 +247,7 @@ end
 local function setup_keymap()
 	local buf_id = vim.api.nvim_win_get_buf(H.active.win_id)
 
+	-- TODO: allow redefining it
 	local keys = {
 		["q"] = action_close,
 		["<cr>"] = action_select,
@@ -266,7 +267,9 @@ end
 local function setup_autocmds()
 	local buf_id = vim.api.nvim_win_get_buf(H.active.win_id)
 
-	local cursor_moved = vim.api.nvim_create_autocmd("CursorMoved", {
+	local autocmd = vim.api.nvim_create_autocmd
+
+	local cursor_moved = autocmd("CursorMoved", {
 		buffer = buf_id,
 		callback = function()
 			local cursor = vim.api.nvim_win_get_cursor(0)
@@ -280,14 +283,14 @@ local function setup_autocmds()
 		end,
 	})
 
-	local buf_leave = vim.api.nvim_create_autocmd("BufLeave", {
+	local buf_leave = autocmd("BufLeave", {
 		buffer = buf_id,
 		callback = function()
 			H.close()
 		end,
 	})
 
-	local vim_resized = vim.api.nvim_create_autocmd("VimResized", {
+	local vim_resized = autocmd("VimResized", {
 		buffer = buf_id,
 		callback = function()
 			H.active.request_window_update = true
@@ -545,7 +548,7 @@ local function display_node(node)
 		text = text .. " .."
 	end
 
-	local text = " " .. trim(text) .. " "
+	text = " " .. trim(text) .. " "
 
 	return { text = text, highlight = highlight }
 end
@@ -557,7 +560,6 @@ function H.sync()
 	local active_current_nodes = H.active_current_nodes()
 
 	local win_width = 0
-	local win_height = #active_current_nodes
 
 	for _, node in ipairs(active_current_nodes) do
 		local display = display_node(node)
@@ -591,6 +593,9 @@ function H.sync()
 
 			win_width = math.max(win_width, sum)
 		end
+
+		-- to ensure it looks fine
+		local win_height = math.max(2, math.min(vim.o.lines - 4, #active_current_nodes))
 
 		local win_id = new_win(buf_id, title, win_width, win_height)
 
