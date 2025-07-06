@@ -42,6 +42,80 @@ local EXTMARK_TYPE = {
 
 --------------------------------------
 
+---@return muffin.SymbolIconProvider
+local function create_icon_provider()
+	if not MiniIcons then
+		return function()
+			return nil
+		end
+	end
+
+	local symbol_kinds = {
+		File = 1,
+		Module = 2,
+		Namespace = 3,
+		Package = 4,
+		Class = 5,
+		Method = 6,
+		Property = 7,
+		Field = 8,
+		Constructor = 9,
+		Enum = 10,
+		Interface = 11,
+		Function = 12,
+		Variable = 13,
+		Constant = 14,
+		String = 15,
+		Number = 16,
+		Boolean = 17,
+		Array = 18,
+		Object = 19,
+		Key = 20,
+		Null = 21,
+		EnumMember = 22,
+		Struct = 23,
+		Event = 24,
+		Operator = 25,
+		TypeParameter = 26,
+	}
+
+	---@type table<lsp.SymbolKind, muffin.HighlightedText>
+	local map = {}
+
+	for name, id in pairs(symbol_kinds) do
+		local icon, hl = MiniIcons.get("lsp", name)
+
+		map[id] = { text = icon, highlight = hl }
+	end
+
+	return function(kind)
+		return map[kind]
+	end
+end
+
+---@type muffin.Config
+local DEFAULT_CONFIG = {
+	symbol_icon_provider = create_icon_provider(),
+	file_icon_provider = function(path)
+		if not MiniIcons then
+			return nil
+		end
+
+		local icon, hl = MiniIcons.get("file", path)
+
+		---@type muffin.HighlightedText
+		return { text = icon, highlight = hl }
+	end,
+}
+
+local H = {
+	---@type muffin.Active?
+	active = nil,
+
+	---@type muffin.Config
+	config = DEFAULT_CONFIG,
+}
+
 ---@param s string
 ---@return string
 local function trim(s)
@@ -100,26 +174,26 @@ local function new_win(buf_id, title, width, height)
 end
 
 local function delete_autocmds()
-	for _, id in ipairs(Muffin.active.autocmd_ids) do
+	for _, id in ipairs(H.active.autocmd_ids) do
 		vim.api.nvim_del_autocmd(id)
 	end
 
-	Muffin.active.autocmd_ids = {}
+	H.active.autocmd_ids = {}
 end
 
 local function setup_autocmds()
-	local buf_id = vim.api.nvim_win_get_buf(Muffin.active.win_id)
+	local buf_id = vim.api.nvim_win_get_buf(H.active.win_id)
 
 	vim.keymap.set("n", "q", vim.cmd.quit, { buffer = buf_id })
 
 	vim.keymap.set("n", "<cr>", function()
-		Muffin.active.restore_on_close = false
+		H.active.restore_on_close = false
 		vim.cmd.quit()
 	end, { buffer = buf_id })
 
 	vim.keymap.set("n", "c", function()
-		vim.api.nvim_buf_call(vim.api.nvim_win_get_buf(Muffin.active.prev_win_id), function()
-			local range = Muffin.active.node.symbol.range
+		vim.api.nvim_buf_call(vim.api.nvim_win_get_buf(H.active.prev_win_id), function()
+			local range = H.active.node.symbol.range
 
 			local line_start = range.start.line + 1
 			local line_end = range["end"].line + 1
@@ -129,7 +203,7 @@ local function setup_autocmds()
 	end, { buffer = buf_id })
 
 	vim.keymap.set("n", "h", function()
-		local node = Muffin.active.node
+		local node = H.active.node
 		if not node then
 			return
 		end
@@ -141,22 +215,22 @@ local function setup_autocmds()
 
 		parent.selected_child = node
 
-		Muffin.active.node = parent
-		Muffin.active.request_window_update = true
+		H.active.node = parent
+		H.active.request_window_update = true
 
-		Muffin.sync()
+		H.sync()
 	end, { buffer = buf_id })
 
 	vim.keymap.set("n", "l", function()
-		local children = Muffin.active.node.children
+		local children = H.active.node.children
 		if #children == 0 then
 			return
 		end
 
-		Muffin.active.node = Muffin.active.node.selected_child or children[1]
-		Muffin.active.request_window_update = true
+		H.active.node = H.active.node.selected_child or children[1]
+		H.active.request_window_update = true
 
-		Muffin.sync()
+		H.sync()
 	end, { buffer = buf_id })
 
 	local cursor_moved_autocmd_id = vim.api.nvim_create_autocmd("CursorMoved", {
@@ -165,23 +239,23 @@ local function setup_autocmds()
 			local cursor = vim.api.nvim_win_get_cursor(0)
 			local row = cursor[1]
 
-			local node = Muffin.active_current_nodes()[row]
+			local node = H.active_current_nodes()[row]
 
-			Muffin.active.node = node
+			H.active.node = node
 
-			Muffin.sync()
+			H.sync()
 		end,
 	})
 
 	local buf_leave_autocmd_id = vim.api.nvim_create_autocmd("BufLeave", {
 		buffer = buf_id,
 		callback = function()
-			Muffin.close()
+			H.close()
 		end,
 	})
 
 	for _, id in ipairs({ cursor_moved_autocmd_id, buf_leave_autocmd_id }) do
-		table.insert(Muffin.active.autocmd_ids, id)
+		table.insert(H.active.autocmd_ids, id)
 	end
 end
 
@@ -309,68 +383,15 @@ local function get_closest_node(pos, tree)
 	return res and res.node or nil
 end
 
-local M = {}
-
----@return muffin.SymbolIconProvider
-local function create_icon_provider()
-	if not MiniIcons then
-		return function()
-			return nil
-		end
-	end
-
-	local symbol_kinds = {
-		File = 1,
-		Module = 2,
-		Namespace = 3,
-		Package = 4,
-		Class = 5,
-		Method = 6,
-		Property = 7,
-		Field = 8,
-		Constructor = 9,
-		Enum = 10,
-		Interface = 11,
-		Function = 12,
-		Variable = 13,
-		Constant = 14,
-		String = 15,
-		Number = 16,
-		Boolean = 17,
-		Array = 18,
-		Object = 19,
-		Key = 20,
-		Null = 21,
-		EnumMember = 22,
-		Struct = 23,
-		Event = 24,
-		Operator = 25,
-		TypeParameter = 26,
-	}
-
-	---@type table<lsp.SymbolKind, muffin.HighlightedText>
-	local map = {}
-
-	for name, id in pairs(symbol_kinds) do
-		local icon, hl = MiniIcons.get("lsp", name)
-
-		map[id] = { text = icon, highlight = hl }
-	end
-
-	return function(kind)
-		return map[kind]
-	end
-end
-
 ---@return muffin.HighlightedText[]
 local function new_active_window_title()
-	local parent = (Muffin.active.node or {}).parent
+	local parent = (H.active.node or {}).parent
 
 	if parent then
 		local title = parent.symbol.name
 		local highlight = ""
 
-		local icon = Muffin.config.symbol_icon_provider(parent.symbol.kind)
+		local icon = H.config.symbol_icon_provider(parent.symbol.kind)
 
 		if icon then
 			title = icon.text .. " " .. title
@@ -380,13 +401,13 @@ local function new_active_window_title()
 		return { { text = trim(title), highlight = highlight } }
 	end
 
-	local buf_id = vim.api.nvim_win_get_buf(Muffin.active.prev_win_id)
+	local buf_id = vim.api.nvim_win_get_buf(H.active.prev_win_id)
 	local buf_name = vim.api.nvim_buf_get_name(buf_id)
 
 	---@type muffin.HighlightedText[]
 	local segments = {}
 
-	local icon = Muffin.config.file_icon_provider(buf_name)
+	local icon = H.config.file_icon_provider(buf_name)
 	if icon then
 		table.insert(segments, icon)
 		table.insert(segments, { text = " ", highlight = "" })
@@ -399,7 +420,7 @@ end
 
 ---@param filter extmark_type? Several types can be combined with `bit.bor`.
 local function delete_extmarks(filter)
-	for _, extmark in ipairs(Muffin.active.extmarks) do
+	for _, extmark in ipairs(H.active.extmarks) do
 		local matches = not filter or bit.band(filter, extmark.type) ~= 0
 
 		if matches then
@@ -408,47 +429,19 @@ local function delete_extmarks(filter)
 	end
 end
 
----@type muffin.Config
-local DEFAULT_CONFIG = {
-	symbol_icon_provider = create_icon_provider(),
-	file_icon_provider = function(path)
-		if not MiniIcons then
-			return nil
-		end
-
-		local icon, hl = MiniIcons.get("file", path)
-
-		---@type muffin.HighlightedText
-		return { text = icon, highlight = hl }
-	end,
-}
-
-Muffin = {
-	---@type muffin.Active?
-	active = nil,
-
-	---@type muffin.Config
-	config = DEFAULT_CONFIG,
-}
-
----@param config? muffin.Config
-function M.setup(config)
-	Muffin.config = vim.tbl_extend("force", DEFAULT_CONFIG, config)
-end
-
 ---@return boolean
-function Muffin.is_active()
-	return Muffin.active ~= nil
+function H.is_active()
+	return H.active ~= nil
 end
 
 ---@return muffin.Node[]
-function Muffin.active_current_nodes()
-	return ((Muffin.active.node or {}).parent or {}).children or Muffin.active.tree
+function H.active_current_nodes()
+	return ((H.active.node or {}).parent or {}).children or H.active.tree
 end
 
 --- Open popup
-function Muffin.open()
-	if Muffin.is_active() then
+function H.open()
+	if H.is_active() then
 		return
 	end
 
@@ -480,7 +473,7 @@ function Muffin.open()
 
 	local position = vim.lsp.util.make_position_params(0, "utf-8").position
 
-	Muffin.active = {
+	H.active = {
 		win_id = -1,
 		prev_win_id = prev_win_id,
 		prev_cursor_pos = prev_cursor_pos,
@@ -492,7 +485,7 @@ function Muffin.open()
 		extmarks = {},
 	}
 
-	Muffin.sync()
+	H.sync()
 end
 
 ---@param node muffin.Node
@@ -500,7 +493,7 @@ end
 local function display_node(node)
 	local text = node.symbol.name
 
-	local icon = Muffin.config.symbol_icon_provider(node.symbol.kind)
+	local icon = H.config.symbol_icon_provider(node.symbol.kind)
 
 	local highlight = ""
 
@@ -518,11 +511,11 @@ local function display_node(node)
 	return { text = text, highlight = highlight }
 end
 
-function Muffin.sync()
+function H.sync()
 	local lines = {}
 	local highlights = {}
 
-	local active_current_nodes = Muffin.active_current_nodes()
+	local active_current_nodes = H.active_current_nodes()
 
 	local win_width = 0
 	local win_height = #active_current_nodes
@@ -538,13 +531,13 @@ function Muffin.sync()
 		table.insert(highlights, display.highlight)
 	end
 
-	if Muffin.active.request_window_update then
-		Muffin.active.request_window_update = false
+	if H.active.request_window_update then
+		H.active.request_window_update = false
 
-		if Muffin.active.win_id >= 0 then
+		if H.active.win_id >= 0 then
 			delete_autocmds()
 
-			vim.api.nvim_win_close(Muffin.active.win_id, true)
+			vim.api.nvim_win_close(H.active.win_id, true)
 		end
 
 		local buf_id = new_buf()
@@ -562,7 +555,7 @@ function Muffin.sync()
 
 		local win_id = new_win(buf_id, title, win_width, win_height)
 
-		Muffin.active.win_id = win_id
+		H.active.win_id = win_id
 
 		setup_autocmds()
 
@@ -590,18 +583,18 @@ function Muffin.sync()
 				type = EXTMARK_TYPE.symbol_icon,
 			}
 
-			table.insert(Muffin.active.extmarks, extmark)
+			table.insert(H.active.extmarks, extmark)
 		end
 	end
 
-	local win_id = Muffin.active.win_id
+	local win_id = H.active.win_id
 
 	delete_extmarks(EXTMARK_TYPE.symbol_source)
 
-	if Muffin.active.node then
-		vim.api.nvim_win_set_cursor(win_id, { Muffin.active.node.id, 0 })
+	if H.active.node then
+		vim.api.nvim_win_set_cursor(win_id, { H.active.node.id, 0 })
 
-		local range = Muffin.active.node.symbol.range
+		local range = H.active.node.symbol.range
 
 		local start_row = range.start.line
 		local start_col = range.start.character
@@ -609,9 +602,9 @@ function Muffin.sync()
 		local end_row = range["end"].line
 		local end_col = range["end"].character
 
-		vim.api.nvim_win_set_cursor(Muffin.active.prev_win_id, { start_row + 1, start_col })
+		vim.api.nvim_win_set_cursor(H.active.prev_win_id, { start_row + 1, start_col })
 
-		local extmark_buf_id = vim.api.nvim_win_get_buf(Muffin.active.prev_win_id)
+		local extmark_buf_id = vim.api.nvim_win_get_buf(H.active.prev_win_id)
 		local extmark_id = vim.api.nvim_buf_set_extmark(
 			extmark_buf_id,
 			namespace(),
@@ -627,36 +620,61 @@ function Muffin.sync()
 			type = EXTMARK_TYPE.symbol_source,
 		}
 
-		table.insert(Muffin.active.extmarks, extmark)
+		table.insert(H.active.extmarks, extmark)
 	end
 end
 
 --- Close popup
 ---@return boolean
-function Muffin.close()
-	if not Muffin.is_active() then
+function H.close()
+	if not H.is_active() then
 		return false
 	end
 
 	delete_autocmds()
 	delete_extmarks()
 
-	vim.api.nvim_win_close(Muffin.active.win_id, true)
+	vim.api.nvim_win_close(H.active.win_id, true)
 
-	if Muffin.active.restore_on_close then
-		vim.api.nvim_win_set_cursor(Muffin.active.prev_win_id, Muffin.active.prev_cursor_pos)
+	if H.active.restore_on_close then
+		vim.api.nvim_win_set_cursor(H.active.prev_win_id, H.active.prev_cursor_pos)
 	end
 
-	Muffin.active = nil
+	H.active = nil
 
 	return true
 end
 
 --- Toggle popup
-function Muffin.toggle()
-	if not Muffin.close() then
-		Muffin.open()
+function H.toggle()
+	if not H.close() then
+		H.open()
 	end
+end
+
+Muffin = {}
+
+--- Toggle popup
+function Muffin.toggle()
+	H.toggle()
+end
+
+--- Open popup
+function Muffin.open()
+	H.open()
+end
+
+--- Close popup
+---@return boolean closed
+function Muffin.close()
+	return H.close()
+end
+
+local M = {}
+
+---@param config? muffin.Config
+function M.setup(config)
+	H.config = vim.tbl_extend("force", DEFAULT_CONFIG, config or {})
 end
 
 return M
