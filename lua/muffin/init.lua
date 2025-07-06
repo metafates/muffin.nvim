@@ -266,7 +266,7 @@ end
 local function setup_autocmds()
 	local buf_id = vim.api.nvim_win_get_buf(H.active.win_id)
 
-	local cursor_moved_autocmd_id = vim.api.nvim_create_autocmd("CursorMoved", {
+	local cursor_moved = vim.api.nvim_create_autocmd("CursorMoved", {
 		buffer = buf_id,
 		callback = function()
 			local cursor = vim.api.nvim_win_get_cursor(0)
@@ -280,14 +280,22 @@ local function setup_autocmds()
 		end,
 	})
 
-	local buf_leave_autocmd_id = vim.api.nvim_create_autocmd("BufLeave", {
+	local buf_leave = vim.api.nvim_create_autocmd("BufLeave", {
 		buffer = buf_id,
 		callback = function()
 			H.close()
 		end,
 	})
 
-	for _, id in ipairs({ cursor_moved_autocmd_id, buf_leave_autocmd_id }) do
+	local vim_resized = vim.api.nvim_create_autocmd("VimResized", {
+		buffer = buf_id,
+		callback = function()
+			H.active.request_window_update = true
+			H.sync()
+		end,
+	})
+
+	for _, id in ipairs({ cursor_moved, buf_leave, vim_resized }) do
 		table.insert(H.active.autocmd_ids, id)
 	end
 end
