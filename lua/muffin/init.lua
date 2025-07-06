@@ -139,13 +139,60 @@ local function setup_autocmds()
 	end
 end
 
----@param node muffin.Node
+---@param range lsp.Range
 ---@param pos lsp.Position
 ---@return boolean
-local function node_contains_pos(node, pos)
-	local range = node.symbol.range
+local function range_contains_pos(range, pos)
+	local r_start = range.start
+	local r_end = range["end"]
 
-	return range.start.line <= pos.line and range["end"].line >= pos.line
+	-- pos line out of range
+	if not (r_start.line <= pos.line and pos.line <= r_start.line) then
+		return false
+	end
+
+	-- same line for start and end
+	if r_start.line == r_end.line then
+		return r_start.character <= pos.character and pos.character <= r_end.character
+	end
+
+	-- pos on start line
+	if r_start.line == pos.line then
+		return r_start.character <= pos.character
+	end
+
+	-- pos on end line
+	if r_end.line == pos.line then
+		return pos.character <= r_end.character
+	end
+
+	return true
+end
+
+---@param pos lsp.Position
+---@param range lsp.Range
+---@return integer
+local function pos_distance_to_range(pos, range)
+	---@param p lsp.Position
+	---@return integer
+	local function pack(p)
+		local n = tonumber(p.line .. p.character)
+
+		assert(type(n) == "number")
+
+		return n
+	end
+
+	if range_contains_pos(range, pos) then
+		return 0
+	end
+
+	local n = pack(pos)
+
+	local to_start = math.abs(n - pack(range.start))
+	local to_end = math.abs(n - pack(range["end"]))
+
+	return math.min(to_start, to_end)
 end
 
 --- Convert document symbols into hierarchy tree
@@ -174,53 +221,46 @@ end
 
 ---@param pos lsp.Position
 ---@param tree muffin.Node[]
----@return muffin.Node?
-local function get_current_node(pos, tree)
-	for _, node in ipairs(tree) do
-		if node_contains_pos(node, pos) then
-			return get_current_node(pos, node.children) or node
-		end
-	end
-
-	return nil
-end
-
----@param pos lsp.Position
----@param tree muffin.Node[]
 ---@return {node: muffin.Node, distance: integer}?
-local function get_closest_node(pos, tree)
-	local min_distance = 999999
+local function get_closest_node_raw(pos, tree)
+	---@alias res {node: muffin.Node, distance: integer}
 
-	---@type muffin.Node?
-	local closest_node = nil
+	---@param a res
+	---@param b res
+	---@return res
+	local function min(a, b)
+		return a.distance < b.distance and a or b
+	end
+
+	if #tree == 0 then
+		return nil
+	end
+
+	---@type res
+	local min_res = { node = tree[1], distance = math.huge }
 
 	for _, node in ipairs(tree) do
-		local range = node.symbol.range
+		---@type res
+		local res = { node = node, distance = pos_distance_to_range(pos, node.symbol.range) }
+		local res_inner = get_closest_node_raw(pos, node.children)
 
-		local distance = math.min(math.abs(range["end"].line - pos.line), math.abs(range.start.line - pos.line))
+		min_res = min(min_res, res)
 
-		local inner = get_closest_node(pos, node.children)
-
-		if inner and inner.distance <= distance then
-			distance = inner.distance
-			node = inner.node
-		end
-
-		if distance <= min_distance then
-			min_distance = distance
-			closest_node = node
+		if res_inner then
+			min_res = min(min_res, res_inner)
 		end
 	end
 
-	return { node = closest_node, distance = min_distance }
+	return min_res
 end
 
---- Get tree node under cursor
 ---@param pos lsp.Position
 ---@param tree muffin.Node[]
 ---@return muffin.Node?
-local function get_node_for_pos(pos, tree)
-	return get_current_node(pos, tree) or get_closest_node(pos, tree).node
+local function get_closest_node(pos, tree)
+	local res = get_closest_node_raw(pos, tree)
+
+	return res and res.node or nil
 end
 
 local M = {}
@@ -293,6 +333,7 @@ function Muffin.is_active()
 	return Muffin.active ~= nil
 end
 
+---@return muffin.Node[]
 function Muffin.active_current_nodes()
 	return ((Muffin.active.node or {}).parent or {}).children or Muffin.active.tree
 end
@@ -349,14 +390,13 @@ function Muffin.open()
 	local tree = build_tree(symbols)
 
 	local position = vim.lsp.util.make_position_params(0, "utf-8").position
-	local node_under_cursor = get_node_for_pos(position, tree)
 
 	Muffin.active = {
 		win_id = -1,
 		prev_win_id = prev_win_id,
 		prev_cursor_pos = prev_cursor_pos,
 		tree = tree,
-		node = node_under_cursor,
+		node = get_closest_node(position, tree),
 		restore_on_close = true,
 		namespace_id = vim.api.nvim_create_namespace("Muffin"),
 		autocmd_ids = {},
