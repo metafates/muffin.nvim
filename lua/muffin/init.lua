@@ -181,56 +181,91 @@ local function delete_autocmds()
 	H.active.autocmd_ids = {}
 end
 
+local function action_select()
+	H.active.restore_on_close = false
+	vim.cmd.quit()
+end
+
+local function action_close()
+	vim.cmd.quit()
+end
+
+local function action_comment()
+	vim.api.nvim_buf_call(vim.api.nvim_win_get_buf(H.active.prev_win_id), function()
+		local range = H.active.node.symbol.range
+
+		local line_start = range.start.line + 1
+		local line_end = range["end"].line + 1
+
+		require("vim._comment").toggle_lines(line_start, line_end)
+	end)
+end
+
+local function action_back()
+	local node = H.active.node
+	if not node then
+		return
+	end
+
+	local parent = node.parent
+	if not parent then
+		return
+	end
+
+	parent.selected_child = node
+
+	H.active.node = parent
+	H.active.request_window_update = true
+
+	H.sync()
+end
+
+local function action_forward()
+	local children = H.active.node.children
+	if #children == 0 then
+		return
+	end
+
+	H.active.node = H.active.node.selected_child or children[1]
+	H.active.request_window_update = true
+
+	H.sync()
+end
+
 local function setup_keymap()
 	local buf_id = vim.api.nvim_win_get_buf(H.active.win_id)
 
-	vim.keymap.set("n", "q", vim.cmd.quit, { buffer = buf_id })
-
-	vim.keymap.set("n", "<cr>", function()
-		H.active.restore_on_close = false
-		vim.cmd.quit()
+	vim.keymap.set("n", "q", function()
+		action_close()
 	end, { buffer = buf_id })
 
-	vim.keymap.set("n", "c", function()
+	vim.keymap.set("n", "<cr>", function()
+		action_select()
+	end, { buffer = buf_id })
+
+	-- TODO: not working for some reason?
+	vim.keymap.set("n", "f", function()
 		vim.api.nvim_buf_call(vim.api.nvim_win_get_buf(H.active.prev_win_id), function()
-			local range = H.active.node.symbol.range
+			local line = H.active.node.symbol.range.start.line + 1
 
-			local line_start = range.start.line + 1
-			local line_end = range["end"].line + 1
-
-			require("vim._comment").toggle_lines(line_start, line_end)
+			if vim.fn.foldclosed(line) >= 0 then
+				vim.cmd(line .. "foldopen")
+			else
+				vim.cmd(line .. "foldclose")
+			end
 		end)
 	end, { buffer = buf_id })
 
+	vim.keymap.set("n", "c", function()
+		action_comment()
+	end, { buffer = buf_id })
+
 	vim.keymap.set("n", "h", function()
-		local node = H.active.node
-		if not node then
-			return
-		end
-
-		local parent = node.parent
-		if not parent then
-			return
-		end
-
-		parent.selected_child = node
-
-		H.active.node = parent
-		H.active.request_window_update = true
-
-		H.sync()
+		action_back()
 	end, { buffer = buf_id })
 
 	vim.keymap.set("n", "l", function()
-		local children = H.active.node.children
-		if #children == 0 then
-			return
-		end
-
-		H.active.node = H.active.node.selected_child or children[1]
-		H.active.request_window_update = true
-
-		H.sync()
+		action_forward()
 	end, { buffer = buf_id })
 end
 
