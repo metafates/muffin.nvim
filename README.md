@@ -1,6 +1,7 @@
 # muffin.nvim
 
-A popup window that provides breadcrumbs-like navigation feature in keyboard-centric manner.
+A popup window that provides breadcrumbs-like navigation in keyboard-centric manner.
+Inspired by [hasansujon786/nvim-navbuddy].
 
 [![asciicast](https://asciinema.org/a/726401.svg)](https://asciinema.org/a/726401)
 
@@ -67,6 +68,12 @@ When popup is opened, you can use the following keys for certain actions:
 
 You can't rebind these keys _yet_.
 
+## To do
+
+- [ ] More actions. For example folding and copying.
+- [ ] Allow rebinding built-in keys.
+
 [echasnovski/mini.icons]: https://github.com/echasnovski/mini.nvim/blob/main/readmes/mini-icons.md
 [folke/lazy.nvim]: https://github.com/folke/lazy.nvim
 [echasnovski/mini.deps]: https://github.com/echasnovski/mini.nvim/blob/main/readmes/mini-deps.md
+[hasansujon786/nvim-navbuddy]: https://github.com/hasansujon786/nvim-navbuddy
