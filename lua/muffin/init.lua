@@ -389,10 +389,10 @@ local function new_active_window_title()
 	return segments
 end
 
----@param filter extmark_type?
+---@param filter extmark_type? Several types can be combined with `bit.bor`.
 local function delete_extmarks(filter)
 	for _, extmark in ipairs(Muffin.active.extmarks) do
-		local matches = not filter or filter == extmark.type
+		local matches = not filter or bit.band(filter, extmark.type) ~= 0
 
 		if matches then
 			vim.api.nvim_buf_del_extmark(extmark.buf_id, namespace(), extmark.extmark_id)
@@ -565,12 +565,14 @@ function Muffin.sync()
 		delete_extmarks(EXTMARK_TYPE.symbol_icon)
 
 		for i, highlight in ipairs(highlights) do
+			local end_col = vim.api.nvim_strwidth(lines[i]) + 1
+
 			local id = vim.api.nvim_buf_set_extmark(
 				buf_id,
 				namespace(),
 				i - 1,
 				0,
-				{ end_row = i - 1, end_col = 4, hl_group = highlight }
+				{ end_row = i - 1, end_col = end_col, hl_group = highlight }
 			)
 
 			---@type muffin.Extmark
