@@ -181,7 +181,7 @@ local function delete_autocmds()
 	H.active.autocmd_ids = {}
 end
 
-local function setup_autocmds()
+local function setup_keymap()
 	local buf_id = vim.api.nvim_win_get_buf(H.active.win_id)
 
 	vim.keymap.set("n", "q", vim.cmd.quit, { buffer = buf_id })
@@ -232,6 +232,10 @@ local function setup_autocmds()
 
 		H.sync()
 	end, { buffer = buf_id })
+end
+
+local function setup_autocmds()
+	local buf_id = vim.api.nvim_win_get_buf(H.active.win_id)
 
 	local cursor_moved_autocmd_id = vim.api.nvim_create_autocmd("CursorMoved", {
 		buffer = buf_id,
@@ -557,6 +561,7 @@ function H.sync()
 
 		H.active.win_id = win_id
 
+		setup_keymap()
 		setup_autocmds()
 
 		vim.bo[buf_id].modifiable = true
