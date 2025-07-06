@@ -597,7 +597,7 @@ function H.sync()
 		end
 
 		-- to ensure it looks fine
-		local win_height = math.max(2, math.min(vim.o.lines - 4, #active_current_nodes))
+		local win_height = math.max(1, math.min(vim.o.lines - 4, #active_current_nodes))
 
 		local win_id = new_win(buf_id, title, win_width, win_height)
 
