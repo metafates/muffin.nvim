@@ -232,41 +232,35 @@ local function action_forward()
 	H.sync()
 end
 
+local function action_fold()
+	vim.api.nvim_buf_call(vim.api.nvim_win_get_buf(H.active.prev_win_id), function()
+		local line = H.active.node.symbol.range.start.line + 1
+
+		if vim.fn.foldclosed(line) >= 0 then
+			vim.cmd(line .. "foldopen")
+		else
+			vim.cmd(line .. "foldclose")
+		end
+	end)
+end
+
 local function setup_keymap()
 	local buf_id = vim.api.nvim_win_get_buf(H.active.win_id)
 
-	vim.keymap.set("n", "q", function()
-		action_close()
-	end, { buffer = buf_id })
+	local keys = {
+		["q"] = action_close,
+		["<cr>"] = action_select,
+		["f"] = action_fold,
+		["c"] = action_comment,
+		["h"] = action_back,
+		["l"] = action_forward,
+	}
 
-	vim.keymap.set("n", "<cr>", function()
-		action_select()
-	end, { buffer = buf_id })
-
-	-- TODO: not working for some reason?
-	vim.keymap.set("n", "f", function()
-		vim.api.nvim_buf_call(vim.api.nvim_win_get_buf(H.active.prev_win_id), function()
-			local line = H.active.node.symbol.range.start.line + 1
-
-			if vim.fn.foldclosed(line) >= 0 then
-				vim.cmd(line .. "foldopen")
-			else
-				vim.cmd(line .. "foldclose")
-			end
-		end)
-	end, { buffer = buf_id })
-
-	vim.keymap.set("n", "c", function()
-		action_comment()
-	end, { buffer = buf_id })
-
-	vim.keymap.set("n", "h", function()
-		action_back()
-	end, { buffer = buf_id })
-
-	vim.keymap.set("n", "l", function()
-		action_forward()
-	end, { buffer = buf_id })
+	for key, action in pairs(keys) do
+		vim.keymap.set("n", key, function()
+			action()
+		end, { buffer = buf_id })
+	end
 end
 
 local function setup_autocmds()
@@ -335,9 +329,7 @@ local function pos_distance_to_range(pos, range)
 	---@param p lsp.Position
 	---@return integer
 	local function pack(p)
-		local n = tonumber(p.line .. p.character)
-
-		assert(type(n) == "number")
+		local n = assert(tonumber(p.line .. p.character))
 
 		return n
 	end
@@ -694,18 +686,20 @@ end
 
 Muffin = {}
 
---- Toggle popup
+--- Opens a popup if it was not opened, closes otherwise.
 function Muffin.toggle()
 	H.toggle()
 end
 
---- Open popup
+--- Opens a popup with document symbols.
+--- No-op if already open.
 function Muffin.open()
 	H.open()
 end
 
---- Close popup
----@return boolean closed
+--- Closes the current popup.
+--- No-op if already closed.
+---@return boolean closed Indicates if popup was closed.
 function Muffin.close()
 	return H.close()
 end

@@ -60,7 +60,8 @@ When popup is opened, you can use the following keys for certain actions:
 
 | Key | Action |
 | --- | ------ |
-| <kbd>c</kbd> | Comment out selected symbol |
+| <kbd>c</kbd> | Toggle comment on selected symbol |
+| <kbd>f</kbd> | Toggle fold on selected symbol |
 | <kbd>q</kbd> | Close popup |
 | <kbd>h</kbd> | Go back |
 | <kbd>l</kbd> | Go forward |
@@ -70,7 +71,7 @@ You can't rebind these keys _yet_.
 
 ## To do
 
-- [ ] More actions. For example folding and copying.
+- [ ] More actions. For example copying and reordering.
 - [ ] Allow rebinding built-in keys.
 
 [echasnovski/mini.icons]: https://github.com/echasnovski/mini.nvim/blob/main/readmes/mini-icons.md
