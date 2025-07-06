@@ -4,7 +4,8 @@
 ---@field symbol lsp.DocumentSymbol
 ---@field parent muffin.Node?
 ---@field children muffin.Node[]
----@field id integer
+---@field id integer Index of this node
+---@field selected_child muffin.Node?
 
 ---@enum extmark_type
 local EXTMARK_TYPE = {
@@ -128,10 +129,17 @@ local function setup_autocmds()
 	end, { buffer = buf_id })
 
 	vim.keymap.set("n", "h", function()
-		local parent = Muffin.active.node.parent
+		local node = Muffin.active.node
+		if not node then
+			return
+		end
+
+		local parent = node.parent
 		if not parent then
 			return
 		end
+
+		parent.selected_child = node
 
 		Muffin.active.node = parent
 		Muffin.active.request_window_update = true
@@ -145,7 +153,7 @@ local function setup_autocmds()
 			return
 		end
 
-		Muffin.active.node = children[1]
+		Muffin.active.node = Muffin.active.node.selected_child or children[1]
 		Muffin.active.request_window_update = true
 
 		Muffin.sync()
