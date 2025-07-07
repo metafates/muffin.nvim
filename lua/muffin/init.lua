@@ -201,23 +201,28 @@ local function action_comment()
 	end)
 end
 
-local function action_back()
+---@param n integer?
+local function action_back_n(n)
 	local node = H.active.node
-	if not node then
-		return
+
+	local at_least_one = false
+
+	while node and node.parent and (not n or n > 0) do
+		at_least_one = true
+
+		if n then
+			n = n - 1
+		end
+
+		node.parent.selected_child = node
+		node = node.parent
 	end
 
-	local parent = node.parent
-	if not parent then
-		return
+	if at_least_one then
+		H.active.node = node
+		H.active.request_window_update = true
+		H.sync()
 	end
-
-	parent.selected_child = node
-
-	H.active.node = parent
-	H.active.request_window_update = true
-
-	H.sync()
 end
 
 local function action_forward()
@@ -252,10 +257,15 @@ local function setup_keymap()
 		["<cr>"] = action_select,
 		["o"] = action_select,
 
+		["gh"] = function()
+			action_back_n()
+		end,
 		["q"] = action_close,
 		["f"] = action_fold,
 		["c"] = action_comment,
-		["h"] = action_back,
+		["h"] = function()
+			action_back_n(1)
+		end,
 		["l"] = action_forward,
 	}
 
