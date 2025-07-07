@@ -64,7 +64,9 @@ When popup is opened, you can use the following keys for certain actions:
 | <kbd>f</kbd> | Toggle fold on selected symbol |
 | <kbd>q</kbd> | Close popup |
 | <kbd>h</kbd> | Go back |
+| <kbd>gh</kbd> | Go back to root symbol |
 | <kbd>l</kbd> | Go forward |
+| <kbd>gl</kbd> | Go forward to the innermost symbol |
 | <kbd>return</kbd> or <kbd>o</kbd> | Close popup and leave cursor at selected symbol |
 
 You can't rebind these keys _yet_.
