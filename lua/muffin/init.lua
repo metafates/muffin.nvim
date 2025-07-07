@@ -313,7 +313,7 @@ local function range_contains_pos(range, pos)
 	local r_end = range["end"]
 
 	-- pos line out of range
-	if not (r_start.line <= pos.line and pos.line <= r_start.line) then
+	if not (r_start.line <= pos.line and pos.line <= r_end.line) then
 		return false
 	end
 
@@ -342,9 +342,7 @@ local function pos_distance_to_range(pos, range)
 	---@param p lsp.Position
 	---@return integer
 	local function pack(p)
-		local n = assert(tonumber(p.line .. p.character))
-
-		return n
+		return (p.line + 1) * 1000000 + p.character
 	end
 
 	if range_contains_pos(range, pos) then
