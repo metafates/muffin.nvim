@@ -225,6 +225,29 @@ local function action_back_n(n)
 	end
 end
 
+---@param n integer?
+local function action_forward_n(n)
+	local node = H.active.node
+
+	local at_least_one = false
+
+	while node and #node.children > 0 and (not n or n > 0) do
+		at_least_one = true
+
+		if n then
+			n = n - 1
+		end
+
+		node = node.selected_child or node.children[1]
+	end
+
+	if at_least_one then
+		H.active.node = node
+		H.active.request_window_update = true
+		H.sync()
+	end
+end
+
 local function action_forward()
 	local children = H.active.node.children
 	if #children == 0 then
@@ -260,13 +283,20 @@ local function setup_keymap()
 		["gh"] = function()
 			action_back_n()
 		end,
-		["q"] = action_close,
-		["f"] = action_fold,
-		["c"] = action_comment,
 		["h"] = function()
 			action_back_n(1)
 		end,
-		["l"] = action_forward,
+
+		["gl"] = function()
+			action_forward_n()
+		end,
+		["l"] = function()
+			action_forward_n(1)
+		end,
+
+		["q"] = action_close,
+		["f"] = action_fold,
+		["c"] = action_comment,
 	}
 
 	for key, action in pairs(keys) do
