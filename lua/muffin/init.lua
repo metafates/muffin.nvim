@@ -613,14 +613,15 @@ function H.sync()
 		delete_extmarks(EXTMARK_TYPE.symbol_icon)
 
 		for i, highlight in ipairs(highlights) do
+			local row = i - 1
 			local end_col = vim.api.nvim_strwidth(lines[i]) + 1
 
 			local id = vim.api.nvim_buf_set_extmark(
 				buf_id,
 				namespace(),
-				i - 1,
+				row,
 				0,
-				{ end_row = i - 1, end_col = end_col, hl_group = highlight }
+				{ end_row = row, end_col = end_col, hl_group = highlight }
 			)
 
 			---@type muffin.Extmark
