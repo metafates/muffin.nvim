@@ -3,7 +3,7 @@
 A popup window that provides breadcrumbs-like navigation in keyboard-centric manner.
 Inspired by [hasansujon786/nvim-navbuddy].
 
-[![asciicast](https://asciinema.org/a/726401.svg)](https://asciinema.org/a/726401)
+![demo](https://github.com/user-attachments/assets/ead54ffa-ce05-48aa-abc8-fbe8330420be)
 
 ## Install
 
