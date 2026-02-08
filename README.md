@@ -12,7 +12,7 @@ With [echasnovski/mini.deps]:
 ```lua
 MiniDeps.add("metafates/muffin.nvim")
 
-Muffin.setup()
+require("muffin").setup()
 ```
 
 With [folke/lazy.nvim]:
