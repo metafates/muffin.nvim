@@ -277,26 +277,33 @@ local function setup_keymap()
 
 	-- TODO: allow redefining it
 	local keys = {
-		["<cr>"] = action_select,
-		["o"] = action_select,
-
+		["<cr>"] = function()
+			action_select()
+		end,
+		["o"] = function()
+			action_select()
+		end,
 		["gh"] = function()
 			action_back_n()
 		end,
 		["h"] = function()
 			action_back_n(1)
 		end,
-
 		["gl"] = function()
 			action_forward_n()
 		end,
 		["l"] = function()
 			action_forward_n(1)
 		end,
-
-		["q"] = action_close,
-		["f"] = action_fold,
-		["c"] = action_comment,
+		["q"] = function()
+			action_close()
+		end,
+		["f"] = function()
+			action_fold()
+		end,
+		["c"] = function()
+			action_comment()
+		end,
 	}
 
 	for key, action in pairs(keys) do
@@ -546,7 +553,7 @@ function H.open()
 	local symbols = {}
 
 	for _, resp in pairs(responses) do
-		for _, sym in ipairs(resp.result) do
+		for _, sym in ipairs(resp.result or {}) do
 			table.insert(symbols, sym)
 		end
 	end
