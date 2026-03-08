@@ -42,6 +42,8 @@ local EXTMARK_TYPE = {
 
 --------------------------------------
 
+local NAMESPACE = vim.api.nvim_create_namespace("Muffin")
+
 ---@return muffin.SymbolIconProvider
 local function create_icon_provider()
 	if not MiniIcons then
@@ -120,12 +122,6 @@ local H = {
 ---@return string
 local function trim(s)
 	return s:match("^%s*(.-)%s*$")
-end
-
--- Returns Muffin namespace id
----@return integer id
-local function namespace()
-	return vim.api.nvim_create_namespace("Muffin")
 end
 
 ---@return integer
@@ -246,18 +242,6 @@ local function action_forward_n(n)
 		H.active.request_window_update = true
 		H.sync()
 	end
-end
-
-local function action_forward()
-	local children = H.active.node.children
-	if #children == 0 then
-		return
-	end
-
-	H.active.node = H.active.node.selected_child or children[1]
-	H.active.request_window_update = true
-
-	H.sync()
 end
 
 local function action_fold()
@@ -507,13 +491,13 @@ local function new_active_window_title()
 	return segments
 end
 
----@param filter extmark_type? Several types can be combined with `bit.bor`.
-local function delete_extmarks(filter)
+---@param type extmark_type?
+local function delete_extmarks(type)
 	for _, extmark in ipairs(H.active.extmarks) do
-		local matches = not filter or bit.band(filter, extmark.type) ~= 0
+		local matches = not type or type == extmark.type
 
 		if matches then
-			vim.api.nvim_buf_del_extmark(extmark.buf_id, namespace(), extmark.extmark_id)
+			vim.api.nvim_buf_del_extmark(extmark.buf_id, NAMESPACE, extmark.extmark_id)
 		end
 	end
 end
@@ -663,7 +647,7 @@ function H.sync()
 
 			local id = vim.api.nvim_buf_set_extmark(
 				buf_id,
-				namespace(),
+				NAMESPACE,
 				row,
 				0,
 				{ end_row = row, end_col = end_col, hl_group = highlight }
@@ -687,33 +671,43 @@ function H.sync()
 	if H.active.node then
 		vim.api.nvim_win_set_cursor(win_id, { H.active.node.id, 0 })
 
-		local range = H.active.node.symbol.range
+		---@param range lsp.Range
+		---@param hl_group string
+		---@param set_cursor boolean
+		---@param priority integer?
+		local function apply(range, hl_group, set_cursor, priority)
+			local start_row = range.start.line
+			local start_col = range.start.character
 
-		local start_row = range.start.line
-		local start_col = range.start.character
+			local end_row = range["end"].line
+			local end_col = range["end"].character
 
-		local end_row = range["end"].line
-		local end_col = range["end"].character
+			if set_cursor then
+				vim.api.nvim_win_set_cursor(H.active.prev_win_id, { start_row + 1, start_col })
+			end
 
-		vim.api.nvim_win_set_cursor(H.active.prev_win_id, { start_row + 1, start_col })
+			local extmark_buf_id = vim.api.nvim_win_get_buf(H.active.prev_win_id)
 
-		local extmark_buf_id = vim.api.nvim_win_get_buf(H.active.prev_win_id)
-		local extmark_id = vim.api.nvim_buf_set_extmark(
-			extmark_buf_id,
-			namespace(),
-			start_row,
-			start_col,
-			{ end_row = end_row, end_col = end_col, hl_group = "Visual" }
-		)
+			local extmark_id = vim.api.nvim_buf_set_extmark(
+				extmark_buf_id,
+				NAMESPACE,
+				start_row,
+				start_col,
+				{ end_row = end_row, end_col = end_col, hl_group = hl_group, priority = priority }
+			)
 
-		---@type muffin.Extmark
-		local extmark = {
-			extmark_id = extmark_id,
-			buf_id = extmark_buf_id,
-			type = EXTMARK_TYPE.symbol_source,
-		}
+			---@type muffin.Extmark
+			local extmark = {
+				extmark_id = extmark_id,
+				buf_id = extmark_buf_id,
+				type = EXTMARK_TYPE.symbol_source,
+			}
 
-		table.insert(H.active.extmarks, extmark)
+			table.insert(H.active.extmarks, extmark)
+		end
+
+		apply(H.active.node.symbol.range, "Visual", false, 300)
+		apply(H.active.node.symbol.selectionRange, "IncSearch", true, 500)
 	end
 end
 
