@@ -116,7 +116,30 @@ local H = {
 
 	---@type muffin.Config
 	config = DEFAULT_CONFIG,
+
+	---@type table<integer, muffin.Node[]>
+	trees = {},
 }
+
+---@param strs string[]
+---@return integer
+local function hashsum(strs)
+	local hash = 0
+	for _, str in ipairs(strs) do
+		for i = 1, #str do
+			-- Use string.byte to get the numeric (ASCII/Unicode) value of the character
+			local char_code = string.byte(str, i)
+			-- A common way to combine values: multiply current hash by a constant (e.g., 31) and add the char code
+			-- This uses bitwise operations (& 0xFFFFFFFF) for consistent results across 32-bit/64-bit systems if needed,
+			-- but basic math often suffices for simple cases.
+			-- The use of 31 helps distribute hashes well.
+			hash = (hash * 31) + char_code
+		end
+	end
+	-- Use modulo if you need the hash to fit within a specific table size or range (e.g., for an array index)
+	-- return hash % table_size
+	return hash
+end
 
 ---@param s string
 ---@return string
@@ -512,25 +535,18 @@ function H.active_current_nodes()
 	return ((H.active.node or {}).parent or {}).children or H.active.tree
 end
 
---- Open popup
-function H.open()
-	if H.is_active() then
-		return
-	end
-
-	local prev_win_id = vim.api.nvim_get_current_win()
-	local prev_cursor_pos = vim.api.nvim_win_get_cursor(0)
-
+---@return muffin.Node[]
+local function new_tree()
 	local responses, err = vim.lsp.buf_request_sync(0, vim.lsp.protocol.Methods.textDocument_documentSymbol, {
 		textDocument = vim.lsp.util.make_text_document_params(),
 	})
 
 	if err then
-		return
+		return {}
 	end
 
 	if not responses then
-		return
+		return {}
 	end
 
 	---@type lsp.DocumentSymbol[]
@@ -542,7 +558,26 @@ function H.open()
 		end
 	end
 
-	local tree = build_tree(symbols)
+	return build_tree(symbols)
+end
+
+--- Open popup
+function H.open()
+	if H.is_active() then
+		return
+	end
+
+	local prev_win_id = vim.api.nvim_get_current_win()
+	local prev_cursor_pos = vim.api.nvim_win_get_cursor(0)
+
+	local hash = hashsum(vim.api.nvim_buf_get_lines(0, 0, -1, false))
+
+	local tree = H.trees[hash]
+	if tree == nil then
+		tree = new_tree()
+
+		H.trees[hash] = tree
+	end
 
 	local position = vim.lsp.util.make_position_params(0, "utf-8").position
 
