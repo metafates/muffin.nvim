@@ -45,7 +45,7 @@ local EXTMARK_TYPE = {
 local NAMESPACE = vim.api.nvim_create_namespace("Muffin")
 
 ---@return muffin.SymbolIconProvider
-local function create_icon_provider()
+local function create_symbol_icon_provider()
 	if not MiniIcons then
 		return function()
 			return nil
@@ -95,19 +95,26 @@ local function create_icon_provider()
 	end
 end
 
----@type muffin.Config
-local DEFAULT_CONFIG = {
-	symbol_icon_provider = create_icon_provider(),
-	file_icon_provider = function(path)
-		if not MiniIcons then
+---@return muffin.FileIconProvider
+local function create_file_icon_provider()
+	if not MiniIcons then
+		return function()
 			return nil
 		end
+	end
 
+	return function(path)
 		local icon, hl = MiniIcons.get("file", path)
 
 		---@type muffin.HighlightedText
 		return { text = icon, highlight = hl }
-	end,
+	end
+end
+
+---@type muffin.Config
+local DEFAULT_CONFIG = {
+	symbol_icon_provider = create_symbol_icon_provider(),
+	file_icon_provider = create_file_icon_provider(),
 }
 
 local H = {
@@ -125,19 +132,15 @@ local H = {
 ---@return integer
 local function hashsum(strs)
 	local hash = 0
+
 	for _, str in ipairs(strs) do
 		for i = 1, #str do
-			-- Use string.byte to get the numeric (ASCII/Unicode) value of the character
-			local char_code = string.byte(str, i)
-			-- A common way to combine values: multiply current hash by a constant (e.g., 31) and add the char code
-			-- This uses bitwise operations (& 0xFFFFFFFF) for consistent results across 32-bit/64-bit systems if needed,
-			-- but basic math often suffices for simple cases.
-			-- The use of 31 helps distribute hashes well.
-			hash = (hash * 31) + char_code
+			local byte = string.byte(str, i)
+
+			hash = (hash * 31) + byte
 		end
 	end
-	-- Use modulo if you need the hash to fit within a specific table size or range (e.g., for an array index)
-	-- return hash % table_size
+
 	return hash
 end
 
