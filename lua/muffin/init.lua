@@ -125,19 +125,15 @@ local H = {
 ---@return integer
 local function hashsum(strs)
 	local hash = 0
+
 	for _, str in ipairs(strs) do
 		for i = 1, #str do
-			-- Use string.byte to get the numeric (ASCII/Unicode) value of the character
 			local char_code = string.byte(str, i)
-			-- A common way to combine values: multiply current hash by a constant (e.g., 31) and add the char code
-			-- This uses bitwise operations (& 0xFFFFFFFF) for consistent results across 32-bit/64-bit systems if needed,
-			-- but basic math often suffices for simple cases.
-			-- The use of 31 helps distribute hashes well.
+
 			hash = (hash * 31) + char_code
 		end
 	end
-	-- Use modulo if you need the hash to fit within a specific table size or range (e.g., for an array index)
-	-- return hash % table_size
+
 	return hash
 end
 
