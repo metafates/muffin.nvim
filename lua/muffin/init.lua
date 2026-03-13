@@ -128,22 +128,6 @@ local H = {
 	trees = {},
 }
 
----@param strs string[]
----@return integer
-local function hashsum(strs)
-	local hash = 0
-
-	for _, str in ipairs(strs) do
-		for i = 1, #str do
-			local byte = string.byte(str, i)
-
-			hash = (hash * 31) + byte
-		end
-	end
-
-	return hash
-end
-
 ---@param s string
 ---@return string
 local function trim(s)
@@ -573,13 +557,13 @@ function H.open()
 	local prev_win_id = vim.api.nvim_get_current_win()
 	local prev_cursor_pos = vim.api.nvim_win_get_cursor(0)
 
-	local hash = hashsum(vim.api.nvim_buf_get_lines(0, 0, -1, false))
+	local key = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
 
-	local tree = H.trees[hash]
+	local tree = H.trees[key]
 	if tree == nil then
 		tree = new_tree()
 
-		H.trees[hash] = tree
+		H.trees[key] = tree
 	end
 
 	local position = vim.lsp.util.make_position_params(0, "utf-8").position
