@@ -45,7 +45,7 @@ local EXTMARK_TYPE = {
 local NAMESPACE = vim.api.nvim_create_namespace("Muffin")
 
 ---@return muffin.SymbolIconProvider
-local function create_icon_provider()
+local function create_symbol_icon_provider()
 	if not MiniIcons then
 		return function()
 			return nil
@@ -95,19 +95,26 @@ local function create_icon_provider()
 	end
 end
 
----@type muffin.Config
-local DEFAULT_CONFIG = {
-	symbol_icon_provider = create_icon_provider(),
-	file_icon_provider = function(path)
-		if not MiniIcons then
+---@return muffin.FileIconProvider
+local function create_file_icon_provider()
+	if not MiniIcons then
+		return function()
 			return nil
 		end
+	end
 
+	return function(path)
 		local icon, hl = MiniIcons.get("file", path)
 
 		---@type muffin.HighlightedText
 		return { text = icon, highlight = hl }
-	end,
+	end
+end
+
+---@type muffin.Config
+local DEFAULT_CONFIG = {
+	symbol_icon_provider = create_symbol_icon_provider(),
+	file_icon_provider = create_file_icon_provider(),
 }
 
 local H = {
@@ -128,9 +135,9 @@ local function hashsum(strs)
 
 	for _, str in ipairs(strs) do
 		for i = 1, #str do
-			local char_code = string.byte(str, i)
+			local byte = string.byte(str, i)
 
-			hash = (hash * 31) + char_code
+			hash = (hash * 31) + byte
 		end
 	end
 
